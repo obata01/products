@@ -1,0 +1,13 @@
+services:
+  front:
+    container_name: streamlit
+    build:
+      dockerfile: Dockerfile
+      context: .
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+    volumes:
+      - .:/app
+    # command: /bin/bash
+    tty: true
