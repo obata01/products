@@ -126,6 +126,8 @@ async def test_stream_thinking_enqueues_working_event_per_token():
     assert mock_queue.enqueue_event.call_count == 2
 
 
+
+
 @pytest.mark.asyncio
 async def test_stream_thinking_returns_final_output():
     """on_chain_end LangGraph イベントの output が返されることを確認."""

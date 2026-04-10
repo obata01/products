@@ -1,8 +1,12 @@
-"""他の A2A エージェントと通信するためのクライアントモジュール."""
+"""他の A2A エージェントと通信するための汎用クライアントモジュール.
+
+特定サーバーのレスポンス解釈には依存しない。
+サーバー固有の変換ロジックは services 配下に配置すること。
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Self
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -16,16 +20,10 @@ from a2a.types import (
     Artifact,
     Message,
     Part,
-    TaskArtifactUpdateEvent,
-    TaskState,
-    TaskStatusUpdateEvent,
 )
 
-# thinking: 思考中の中間テキスト / answer: 最終回答テキスト
-StreamChunk = tuple[Literal["thinking", "answer"], str]
 
-
-def _text_from_parts(parts: list[Part]) -> str:
+def text_from_parts(parts: list[Part]) -> str:
     """Part リストからテキストを連結して返す.
 
     Args:
@@ -37,7 +35,7 @@ def _text_from_parts(parts: list[Part]) -> str:
     return "".join(p.root.text for p in parts if hasattr(p.root, "text") and p.root.text)
 
 
-def _text_from_message(message: Message) -> str:
+def text_from_message(message: Message) -> str:
     """Message からテキストを抽出する.
 
     Args:
@@ -46,10 +44,10 @@ def _text_from_message(message: Message) -> str:
     Returns:
         メッセージのテキスト.
     """
-    return _text_from_parts(message.parts)
+    return text_from_parts(message.parts)
 
 
-def _text_from_artifact(artifact: Artifact) -> str:
+def text_from_artifact(artifact: Artifact) -> str:
     """Artifact からテキストを抽出する.
 
     Args:
@@ -58,20 +56,20 @@ def _text_from_artifact(artifact: Artifact) -> str:
     Returns:
         成果物のテキスト.
     """
-    return _text_from_parts(artifact.parts)
+    return text_from_parts(artifact.parts)
 
 
 class AgentClient:
-    """他の A2A エージェントと通信するクライアント.
+    """他の A2A エージェントと通信する汎用クライアント.
 
     async with 構文でライフサイクルを管理し、内部の httpx セッションを共有する。
+    A2A プロトコルの生イベントをそのまま返す。
+    サーバー固有のイベント解釈はこのクラスの責任外。
 
     Example:
         async with AgentClient("http://other-agent/a2a") as client:
-            result = await client.send("こんにちは")
-
-            async for chunk_type, text in client.stream("こんにちは"):
-                print(chunk_type, text)
+            async for event in client.stream_events("こんにちは"):
+                print(event)
     """
 
     def __init__(self, base_url: str) -> None:
@@ -96,54 +94,20 @@ class AgentClient:
         if self._httpx_client:
             await self._httpx_client.__aexit__(*args)
 
-    async def send(self, text: str) -> str:
-        """テキストメッセージを送信して最終回答を返す.
-
-        Args:
-            text: 送信するテキストメッセージ.
-
-        Returns:
-            エージェントの最終回答テキスト.
-        """
-        answer = ""
-        async for chunk_type, chunk_text in self.stream(text):
-            if chunk_type == "answer":
-                answer = chunk_text
-        return answer
-
-    async def stream(self, text: str) -> AsyncGenerator[StreamChunk]:
-        """テキストメッセージを送信し、思考と最終回答を StreamChunk としてストリーミングする.
+    async def stream_events(self, text: str) -> AsyncGenerator[Any]:
+        """テキストメッセージを送信し、A2A の生イベントを yield する.
 
         Args:
             text: 送信するテキストメッセージ.
 
         Yields:
-            ("thinking", テキスト) または ("answer", テキスト) のタプル.
-
-        Note:
-            thinking テキストは累積値として届く場合がある（サーバー実装に依存）.
+            A2A プロトコルの生イベント。具体的な型はサーバー実装に依存する。
         """
         client = await self._resolve_client()
         message = create_text_message_object(content=text)
 
         async for event in client.send_message(message):
-            match event:
-                case (_, TaskStatusUpdateEvent() as ev) if (
-                    ev.status.state == TaskState.working and ev.status.message
-                ):
-                    thinking = _text_from_message(ev.status.message)
-                    if thinking:
-                        yield "thinking", thinking
-
-                case (_, TaskArtifactUpdateEvent() as ev):
-                    answer = _text_from_artifact(ev.artifact)
-                    if answer:
-                        yield "answer", answer
-
-                case Message() as msg:
-                    answer = _text_from_message(msg)
-                    if answer:
-                        yield "answer", answer
+            yield event
 
     async def _resolve_client(self) -> Client:
         """エージェントカードを解決して Client を生成する.

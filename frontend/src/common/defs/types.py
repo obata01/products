@@ -4,9 +4,13 @@ from typing import NewType
 ClientName = NewType("ClientName", str)
 
 
-class NodeName(StrEnum):
-    """ノード名一覧."""
+class ChunkType(StrEnum):
+    """ストリーミングチャンクの種別.
 
-    START_GATE = "START_GATE"
-    SAMPLE = "SAMPLE"
-    END_GATE = "END_GATE"
+    クライアント内部で統一的に使用する表示用チャンクの種別。
+    サーバーの通信プロトコル（SSE / A2A）に依存しない。
+    """
+
+    THINKING = "thinking"
+    ANSWER = "answer"
+    ANSWER_START = "answer_start"

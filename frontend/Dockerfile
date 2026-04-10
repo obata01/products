@@ -15,4 +15,4 @@ COPY src ${APP_HOME}/src
 
 ENV PYTHONPATH "${PYTHONPATH}:${APP_HOME}/src"
 
-CMD ["streamlit", "run", "src.main.py"]
+CMD ["streamlit", "run", "src/main.py"]

@@ -17,4 +17,4 @@ update:
 	$(DOCKER_RUN) uv pip install .[dev] --system
 
 dev:
-	$(DOCKER_RUN) streamlit run src/main.py --server.fileWatcherType auto
+	$(DOCKER_RUN) streamlit run src/main.py --server.fileWatcherType auto --logger.level=debug

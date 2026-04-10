@@ -1,3 +1,5 @@
+"""汎用 A2A クライアントのテスト."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,9 +18,9 @@ from a2a.utils import new_agent_text_message
 
 from src.a2a_app.client import (
     AgentClient,
-    _text_from_artifact,
-    _text_from_message,
-    _text_from_parts,
+    text_from_artifact,
+    text_from_message,
+    text_from_parts,
 )
 
 
@@ -30,30 +32,8 @@ def _make_artifact(text: str) -> Artifact:
     return Artifact(artifact_id="art1", parts=[_make_part(text)])
 
 
-def _make_thinking_event(text: str) -> tuple:
-    return (
-        MagicMock(),
-        TaskStatusUpdateEvent(
-            status=TaskStatus(state=TaskState.working, message=new_agent_text_message(text)),
-            final=False,
-            task_id="t1",
-            context_id="c1",
-        ),
-    )
-
-
-def _make_artifact_event(text: str) -> tuple:
-    return (
-        MagicMock(),
-        TaskArtifactUpdateEvent(
-            artifact=_make_artifact(text),
-            task_id="t1",
-            context_id="c1",
-        ),
-    )
-
-
 def _make_client_with_mock(events: list) -> AgentClient:
+    """モックイベントを返す AgentClient を作成する."""
     async def fake_send_message(*args, **kwargs):
         for e in events:
             yield e
@@ -79,60 +59,57 @@ def test_text_from_parts(texts, expected):
     """Part リストからテキストを正しく結合することを確認."""
     parts = [_make_part(t) for t in texts]
 
-    assert _text_from_parts(parts) == expected
+    assert text_from_parts(parts) == expected
 
 
 def test_text_from_message():
     """Message からテキストを正しく抽出することを確認."""
     message = Message(role=Role.agent, parts=[_make_part("hello")], message_id="m1")
 
-    assert _text_from_message(message) == "hello"
+    assert text_from_message(message) == "hello"
 
 
 def test_text_from_artifact():
     """Artifact からテキストを正しく抽出することを確認."""
-    assert _text_from_artifact(_make_artifact("result")) == "result"
+    assert text_from_artifact(_make_artifact("result")) == "result"
 
 
 @pytest.mark.asyncio
-async def test_agent_client_stream_yields_thinking():
-    """stream() が thinking イベントを ('thinking', text) で yield することを確認."""
-    client = _make_client_with_mock([_make_thinking_event("considering...")])
+async def test_stream_events_yields_raw_events():
+    """stream_events() が A2A の生イベントをそのまま yield することを確認."""
+    thinking_event = (
+        MagicMock(),
+        TaskStatusUpdateEvent(
+            status=TaskStatus(state=TaskState.working, message=new_agent_text_message("thinking")),
+            final=False,
+            task_id="t1",
+            context_id="c1",
+        ),
+    )
+    artifact_event = (
+        MagicMock(),
+        TaskArtifactUpdateEvent(
+            artifact=_make_artifact("answer"),
+            task_id="t1",
+            context_id="c1",
+        ),
+    )
+    client = _make_client_with_mock([thinking_event, artifact_event])
 
-    chunks = [c async for c in client.stream("hello")]
+    events = [e async for e in client.stream_events("hello")]
 
-    assert chunks == [("thinking", "considering...")]
+    assert len(events) == 2
+    assert events[0] is thinking_event
+    assert events[1] is artifact_event
 
 
 @pytest.mark.asyncio
-async def test_agent_client_stream_yields_answer_from_artifact():
-    """stream() が artifact イベントを ('answer', text) で yield することを確認."""
-    client = _make_client_with_mock([_make_artifact_event("final answer")])
-
-    chunks = [c async for c in client.stream("hello")]
-
-    assert chunks == [("answer", "final answer")]
-
-
-@pytest.mark.asyncio
-async def test_agent_client_stream_yields_answer_from_message():
-    """stream() が Message イベントを ('answer', text) で yield することを確認."""
-    message = Message(role=Role.agent, parts=[_make_part("direct reply")], message_id="m1")
+async def test_stream_events_yields_message():
+    """stream_events() が Message をそのまま yield することを確認."""
+    message = Message(role=Role.agent, parts=[_make_part("reply")], message_id="m1")
     client = _make_client_with_mock([message])
 
-    chunks = [c async for c in client.stream("hello")]
+    events = [e async for e in client.stream_events("hello")]
 
-    assert chunks == [("answer", "direct reply")]
-
-
-@pytest.mark.asyncio
-async def test_agent_client_send_returns_last_answer():
-    """send() が最後の answer チャンクのテキストを返すことを確認."""
-    client = _make_client_with_mock([
-        _make_thinking_event("thinking..."),
-        _make_artifact_event("the answer"),
-    ])
-
-    result = await client.send("hello")
-
-    assert result == "the answer"
+    assert len(events) == 1
+    assert events[0] is message
