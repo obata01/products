@@ -1,5 +1,7 @@
 """a2a_stream ページの Template サーバー固有変換ロジックのテスト."""
 
+import json
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,7 +31,13 @@ def _make_artifact(text: str) -> Artifact:
     return Artifact(artifact_id="art1", parts=[_make_part(text)])
 
 
-def _make_thinking_event(text: str) -> tuple:
+def _se_json(se: dict) -> str:
+    """StreamEvent dict を JSON 文字列に変換する."""
+    return json.dumps(se, ensure_ascii=False)
+
+
+def _make_working_event(text: str) -> tuple:
+    """working 状態の TaskStatusUpdateEvent を作成する."""
     return (
         MagicMock(),
         TaskStatusUpdateEvent(
@@ -67,13 +75,31 @@ def _make_client_with_mock(events: list) -> AgentClient:
 
 
 @pytest.mark.asyncio
-async def test_thinking_event_yields_thinking_chunk():
-    """TaskStatusUpdateEvent (working) が THINKING チャンクに変換されることを確認."""
-    client = _make_client_with_mock([_make_thinking_event("considering...")])
+async def test_node_start_yields_thinking_with_label():
+    """node_start StreamEvent が label 付きの THINKING チャンクに変換されることを確認."""
+    client = _make_client_with_mock([
+        _make_working_event(_se_json({"type": "node_start", "node": "SAMPLE", "label": "分析中"})),
+    ])
 
     chunks = [c async for c in _stream_template_chunks(client, "hello")]
 
-    assert chunks == [(ChunkType.THINKING, "considering...")]
+    assert chunks == [(ChunkType.THINKING, "**分析中**")]
+
+
+@pytest.mark.asyncio
+async def test_token_yields_thinking_with_content():
+    """node_start + token で label : content 形式の THINKING になることを確認."""
+    client = _make_client_with_mock([
+        _make_working_event(_se_json({"type": "node_start", "node": "SAMPLE", "label": "分析中"})),
+        _make_working_event(_se_json({"type": "token", "node": "SAMPLE", "content": "hello"})),
+    ])
+
+    chunks = [c async for c in _stream_template_chunks(client, "hello")]
+
+    assert chunks == [
+        (ChunkType.THINKING, "**分析中**"),
+        (ChunkType.THINKING, "**分析中** : hello"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -101,26 +127,62 @@ async def test_message_event_yields_answer_chunk():
 async def test_full_flow_thinking_then_answer():
     """thinking → answer の完全なフローを確認."""
     client = _make_client_with_mock([
-        _make_thinking_event("thinking..."),
+        _make_working_event(_se_json({"type": "node_start", "node": "SAMPLE", "label": "分析中"})),
+        _make_working_event(_se_json({"type": "token", "node": "SAMPLE", "content": "分析結果"})),
+        _make_working_event(_se_json({"type": "node_end", "node": "SAMPLE"})),
         _make_artifact_event("the answer"),
     ])
 
     chunks = [c async for c in _stream_template_chunks(client, "hello")]
 
     assert chunks == [
-        (ChunkType.THINKING, "thinking..."),
+        (ChunkType.THINKING, "**分析中**"),
+        (ChunkType.THINKING, "**分析中** : 分析結果"),
         (ChunkType.ANSWER, "the answer"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_input_required_in_working_event():
+    """working イベント内の input_required StreamEvent が INPUT_REQUIRED チャンクになることを確認."""
+    ir_se = {"type": "input_required", "metadata": {"message": "確認", "preview": "内容"}}
+    client = _make_client_with_mock([
+        _make_working_event(_se_json(ir_se)),
+    ])
+
+    chunks = [c async for c in _stream_template_chunks(client, "hello")]
+
+    assert len(chunks) == 1
+    assert chunks[0][0] == ChunkType.INPUT_REQUIRED
+    metadata = json.loads(chunks[0][1])
+    assert metadata["message"] == "確認"
+    assert metadata["preview"] == "内容"
+    assert metadata["context_id"] == "c1"
 
 
 @pytest.mark.asyncio
 async def test_empty_text_events_are_skipped():
     """テキストが空のイベントはスキップされることを確認."""
     client = _make_client_with_mock([
-        _make_thinking_event(""),
+        _make_working_event(""),
         _make_artifact_event(""),
     ])
 
     chunks = [c async for c in _stream_template_chunks(client, "hello")]
 
     assert chunks == []
+
+
+@pytest.mark.asyncio
+async def test_multiple_nodes_cumulative_thinking():
+    """複数ノードの thinking が累積的にフォーマットされることを確認."""
+    client = _make_client_with_mock([
+        _make_working_event(_se_json({"type": "node_start", "node": "SAMPLE", "label": "分析中"})),
+        _make_working_event(_se_json({"type": "token", "node": "SAMPLE", "content": "結果A"})),
+        _make_working_event(_se_json({"type": "node_end", "node": "SAMPLE"})),
+        _make_working_event(_se_json({"type": "node_start", "node": "CONFIRM", "label": "確認待ち"})),
+    ])
+
+    chunks = [c async for c in _stream_template_chunks(client, "hello")]
+
+    assert chunks[-1] == (ChunkType.THINKING, "**分析中** : 結果A\n\n**確認待ち**")

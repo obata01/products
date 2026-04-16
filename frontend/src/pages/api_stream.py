@@ -12,8 +12,9 @@ from pydantic import ValidationError
 from chat_utils import StreamingChatPage
 from common.defs.server_contracts import SSEEvent, SSEEventType
 from common.defs.types import ChunkType
+from common.settings.app import settings
 
-TEMPLATE_URL = "http://host.docker.internal:8101/test"
+StreamChunks = Generator[tuple[ChunkType, str], None, None]
 
 
 def _parse_sse_events(lines: Generator[str, None, None]) -> Generator[SSEEvent, None, None]:
@@ -75,9 +76,12 @@ def _events_to_chunks(
                 pending_reset = False
             yield ChunkType.ANSWER, event.content
 
+        elif event.type == SSEEventType.INPUT_REQUIRED:
+            yield ChunkType.INPUT_REQUIRED, json.dumps(event.metadata or {})
 
-def _stream_sse(prompt: str) -> Generator[tuple[ChunkType, str], None, None]:
-    """Template サービスへ SSE リクエストを送り、表示用チャンクを yield する.
+
+def _do_stream_sse(prompt: str) -> StreamChunks:
+    """Template サービスへ 1 回の SSE リクエストを送り、表示用チャンクを yield する.
 
     Args:
         prompt: ユーザーが入力したテキスト.
@@ -95,13 +99,16 @@ def _stream_sse(prompt: str) -> Generator[tuple[ChunkType, str], None, None]:
     with httpx.Client(timeout=120) as client:
         with client.stream(
             "POST",
-            TEMPLATE_URL,
+            settings.sample_agent_api_url,
             json=payload,
             headers={"Content-Type": "application/json"},
         ) as response:
             response.raise_for_status()
             events = _parse_sse_events(response.iter_lines())
             yield from _events_to_chunks(events)
+
+
+_stream_sse = _do_stream_sse
 
 
 StreamingChatPage(

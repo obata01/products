@@ -14,3 +14,4 @@ class ChunkType(StrEnum):
     THINKING = "thinking"
     ANSWER = "answer"
     ANSWER_START = "answer_start"
+    INPUT_REQUIRED = "input_required"

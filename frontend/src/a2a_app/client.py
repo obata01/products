@@ -84,7 +84,7 @@ class AgentClient:
 
     async def __aenter__(self) -> Self:
         """Httpx クライアントを初期化して自身を返す."""
-        self._httpx_client = await httpx.AsyncClient().__aenter__()
+        self._httpx_client = await httpx.AsyncClient(timeout=120).__aenter__()
         config = ClientConfig(httpx_client=self._httpx_client, streaming=True)
         self._factory = ClientFactory(config=config)
         return self
@@ -94,17 +94,25 @@ class AgentClient:
         if self._httpx_client:
             await self._httpx_client.__aexit__(*args)
 
-    async def stream_events(self, text: str) -> AsyncGenerator[Any]:
+    async def stream_events(
+        self,
+        text: str,
+        *,
+        context_id: str | None = None,
+    ) -> AsyncGenerator[Any]:
         """テキストメッセージを送信し、A2A の生イベントを yield する.
 
         Args:
             text: 送信するテキストメッセージ.
+            context_id: 既存の会話を継続する場合のコンテキスト ID.
 
         Yields:
             A2A プロトコルの生イベント。具体的な型はサーバー実装に依存する。
         """
         client = await self._resolve_client()
         message = create_text_message_object(content=text)
+        if context_id:
+            message.context_id = context_id
 
         async for event in client.send_message(message):
             yield event

@@ -25,6 +25,7 @@ class SSEEventType(StrEnum):
     NODE_START = "node_start"
     NODE_END = "node_end"
     TOKEN = "token"
+    INPUT_REQUIRED = "input_required"
     DONE = "done"
 
 
@@ -35,14 +36,17 @@ class SSEEvent(BaseModel):
         data: {"type": "node_start", "node": "SAMPLE"}
         data: {"type": "token", "content": "こんにちは"}
         data: {"type": "node_end", "node": "SAMPLE"}
+        data: {"type": "input_required", "metadata": {"message": "...", "preview": "..."}}
         data: {"type": "done"}
 
     Attributes:
         type: イベント種別.
         node: ノード名. node_start / node_end 時に設定される.
         content: トークンテキスト. token 時に設定される.
+        metadata: 付加情報. input_required 時に確認メッセージ等が含まれる.
     """
 
     type: SSEEventType
     node: str = ""
     content: str = ""
+    metadata: dict | None = None
