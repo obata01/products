@@ -1,0 +1,14 @@
+services:
+  tf-aws:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TERRAFORM_VERSION: ${TERRAFORM_VERSION:-1.14.8-1}
+    tty: true
+    stdin_open: true
+    command: /bin/bash
+    volumes:
+      - .:/work
+      - ${HOME}/.aws:/root/.aws:ro
+    working_dir: /work

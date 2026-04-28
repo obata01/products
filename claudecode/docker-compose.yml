@@ -1,0 +1,14 @@
+services:
+  claudecode:
+    container_name: claudecode
+    build:
+      dockerfile: Dockerfile
+      context: .
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+    ports:
+      - "8102:8102"
+    volumes:
+      - .:/app
+    tty: true

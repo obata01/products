@@ -1,0 +1,54 @@
+
+llms:
+  chat_clients:
+    bedrock:
+      - name: "sonnet"
+        config:
+          model_id: "jp.anthropic.claude-sonnet-4-20250514"
+          region_name: "ap-northeast-1"
+        default_params:
+          max_tokens: 1024
+          top_p: 0.1
+      - name: "haiku"
+        config:
+          model_id: "jp.anthropic.claude-haiku-4-20250506"
+          region_name: "ap-northeast-1"
+        default_params:
+          max_tokens: 1024
+          top_p: 0.1
+
+    azure:
+      - name: "gpt-4.1-mini"
+        config:
+          model: "gpt-4.1-mini"
+          azure_deployment: "gpt-4.1-mini"
+          azure_endpoint_env: "AZURE_OPENAI_ENDPOINT"
+          api_key_env: "AZURE_OPENAI_API_KEY"
+          openai_api_version: "2024-12-01-preview"
+        default_params:
+          temperature: 0.5
+          max_tokens: 1024
+          top_p: 0.9
+
+    openai:
+      - name: "gpt-4.1-mini"
+        config:
+          model: "gpt-4.1-mini"
+          api_key_env: "OPENAI_API_KEY"
+        default_params:
+          top_p: 0.9
+
+  embed_clients:
+    openai:
+      - name: text-embedding-3-small
+        config:
+          model: text-embedding-3-small
+          api_key_env: AZURE_OPENAI_API_KEY
+
+
+nodes: []
+
+
+checkpoint:
+  kind: sqlite
+  dsn: "/app/db/sqlite/checkpoints.sqlite"

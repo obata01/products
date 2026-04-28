@@ -54,6 +54,7 @@ async def _stream_template_chunks(
     """
     thinking_lines: list[str] = []
     current_label = ""
+    current_tokens: list[str] = []
 
     async for event in client.stream_events(text, context_id=context_id):
         match event:
@@ -97,13 +98,15 @@ async def _stream_template_chunks(
 
                 elif se_type == "node_start":
                     current_label = se.get("label") or se.get("node", "")
+                    current_tokens = []
                     thinking_lines.append(f"**{current_label}**")
                     yield ChunkType.THINKING, "\n\n".join(thinking_lines)
 
                 elif se_type == "token":
                     content = se.get("content", "")
                     if content and thinking_lines:
-                        thinking_lines[-1] = f"**{current_label}** : {content}"
+                        current_tokens.append(content)
+                        thinking_lines[-1] = f"**{current_label}** : {''.join(current_tokens)}"
                         yield ChunkType.THINKING, "\n\n".join(thinking_lines)
 
             case (_, TaskArtifactUpdateEvent() as ev):

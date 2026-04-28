@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 import json
 from collections.abc import Generator
 
@@ -93,7 +94,7 @@ def _do_stream_sse(prompt: str) -> StreamChunks:
         httpx.HTTPStatusError: サーバーがエラーレスポンスを返した場合.
         httpx.ConnectError: サーバーに接続できなかった場合.
     """
-    session_id = st.session_state.get("api_session_id", "streamlit-api")
+    session_id = st.session_state.get("api_session_id", str(uuid.uuid4()))
     payload = {"session_id": session_id, "message": prompt, "stream": True}
 
     with httpx.Client(timeout=120) as client:

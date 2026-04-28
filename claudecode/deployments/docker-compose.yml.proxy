@@ -1,0 +1,24 @@
+services:
+  tf-aws:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        TERRAFORM_VERSION: ${TERRAFORM_VERSION:-1.14.8-1}
+    environment:
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+      no_proxy: ${NO_PROXY:-}
+    tty: true
+    stdin_open: true
+    command: /bin/bash
+    volumes:
+      - .:/work
+      - ${HOME}/.aws:/root/.aws:ro
+    working_dir: /work
